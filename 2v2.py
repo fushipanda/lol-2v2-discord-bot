@@ -181,6 +181,12 @@ options = category_list.splitlines()
 
 @client.event
 async def on_ready():
+    try:
+        synced = await client.tree.sync()
+        print(f"Synced {len(synced)} command(s)")
+    except Exception as e:
+        print(f"Failed to sync commands: {e}")
+    
     load_category_history()
     print("---------- League 2v2 Bot is ready ----------")
 
@@ -191,7 +197,7 @@ async def on_message(message):
 
 # ---------- !roll COMMAND ----------
 
-@client.command()
+@client.hybrid_command()
 async def roll(ctx):
     """
     Randomly selects an item from a hardcoded list and posts it.
@@ -203,7 +209,7 @@ async def roll(ctx):
 
 # ---------- !category COMMAND ----------
 
-@client.command()
+@client.hybrid_command()
 async def category(ctx):
     """
     Generates a custom League category using GPT with a clean format.

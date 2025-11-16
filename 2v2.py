@@ -57,6 +57,27 @@ def colored_print(*args, **kwargs):
 #         except Exception as e:
 #             error(f"Reroll error: {e}")
 
+# Add this after your imports and before the bot setup
+previous_categories = set()  # Store category names to avoid duplicates
+MAX_HISTORY = 20  # Limit how many we remember
+
+# Add this function to save/load history
+def save_category_history():
+    with open('category_history.txt', 'w') as f:
+        for cat in previous_categories:
+            f.write(cat + '\n')
+
+def load_category_history():
+    global previous_categories
+    try:
+        with open('category_history.txt', 'r') as f:
+            previous_categories = set(line.strip() for line in f.readlines())
+            # Keep only the most recent ones if too many
+            if len(previous_categories) > MAX_HISTORY:
+                previous_categories = set(list(previous_categories)[-MAX_HISTORY:])
+    except FileNotFoundError:
+        previous_categories = set()
+
 # Load environment variables
 load_dotenv()
 discord_token = os.getenv("DISCORD_TOKEN")
@@ -126,7 +147,6 @@ Piltover
 Least 5 Mastery
 Purple
 Silencers
-Spin Again
 Bearded Champs
 Non-Humanoid
 Ionia
@@ -161,6 +181,7 @@ options = category_list.splitlines()
 
 @client.event
 async def on_ready():
+    load_category_history()
     print("---------- League 2v2 Bot is ready ----------")
 
 @client.event
@@ -188,15 +209,24 @@ async def category(ctx):
     Generates a custom League category using GPT with a clean format.
     """
 
+    global previous_categories
+
     await ctx.send("🧠 Thinking... Generating categories...")
+
+    excluded_categories_text = ""
+    if previous_categories:
+        excluded_categories_text = f"\n{', '.join(previous_categories)}"
 
     # Rotate persona and theme
     system_message = random.choice([
         "You are a creative game designer who makes unique champion challenges.",
+        "You are a skill based game designer who creates categories based on gameplay feel, NOT lore or visuals.",
         "You are a chaotic League GM who loves bending rules.",
         "You are a statistics-based AI trained on every League match ever.",
         "You are a League coach creating off-meta drills.",
-        "You are a witty game critic inventing sarcastic champion categories."
+        "You are a witty game critic inventing sarcastic champion categories.",
+        "You are making categories to specifically annoy try-hards and one-tricks.",
+        "You are a creative game designer who makes unique champion challenges."
     ])
 
     prompt_instruction = random.choice([
@@ -205,13 +235,29 @@ async def category(ctx):
         f"Come up with a funny or chaotic challenge category that still works.",
         f"Design a category that creates team-wide synergy opportunities.",
         f"Create a high-skill cap challenge category based on ability usage.",
-        f"Create a category based on champion skin lines.",
-        f"Create a category based on champion lore."
+        f"Create a category based on the same champion skin line.",
+        f"Create a category based on champion lore.",
+        f"Create a category based on champion region (e.g demacia, ionia, noxus).",
+        f"Create a category based on newer released champions (last 2 years)",
+        f"Create a category based on weird ability scaling ratios",
+        f"Create a category based on a physical feature (e.g., horns, tails, wings)",
+        f"Create a category based on champions that players often forget exist"
     ])
+
+    banned_concepts = random.sample([
+        "cosmic", "star", "void",
+        "yordle", "demacia", "noxus", "ionia",
+        "transform", "stealth", "invisible",
+        "dash", "blink",
+        "animal", "spirit", "demon", "god",
+        "elemental", "shapeshifter",
+        "fire", "ice", "water", "earth", "wind", "lightning",
+        "project", "star guardian"
+    ], k=random.randint(3, 6))
 
     category_text = ""
 
-    if random.randint(1, 6) == 1:
+    if random.randint(1, 4) == 1:
         selected_item = random.choice(options)
         info(f"PROC: selected item is {selected_item}")
         full_prompt = f"""
@@ -223,7 +269,7 @@ async def category(ctx):
 
                         [Emoji related to the category]  {selected_item}
                         Very brief and concise explanation of what defines this category
-
+                        BLANK LINE
                         Example Champions:
                         Champion1, Champion2, Champion3, ..., Champion6
 
@@ -237,9 +283,7 @@ async def category(ctx):
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": full_prompt}
                 ],
-                max_tokens=200,
-                temperature=random.uniform(1.3, 1.8),
-                top_p=random.uniform(0.85, 0.95)
+                max_completion_tokens=400
             )
 
             category_text = response.choices[0].message.content.strip()
@@ -251,6 +295,8 @@ async def category(ctx):
 
         info(f"SYSTEM MESSAGE: {system_message}")
         info(f"PROMPT INSTRUCTION: {prompt_instruction}")
+        info(f"BANNED CONCEPTS: {', '.join(banned_concepts)}")
+        info(f"PREVIOUS CONCEPTS: {excluded_categories_text}")
 
         # You may be inspired by this list of existing categories: {category_list}
         full_prompt = f"""
@@ -262,13 +308,13 @@ async def category(ctx):
                         - Apply to **at least 6 champions** minimum
                         - Be **unique** and **not directly copied** from the provided examples
 
-
+                        IMPORTANT: Do NOT create categories about: {', '.join(banned_concepts)},{excluded_categories_text}
 
                         **Format your response exactly like this:**
 
                         [Emoji related to the category] Category Name
-                        Very brief and concise explanation of what defines this category
-
+                        Very brief and concise explanation of what defines this category. The Category Name should be simple and make logical sense to the category.
+                        BLANK LINE
                         Example Champions: 
                         Champion1, Champion2, Champion3, ..., Champion6
 
@@ -277,14 +323,16 @@ async def category(ctx):
 
         try:
             response = openai.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4o",  # Or use "gpt-5-mini" or "gpt-5-nano"
                 messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": full_prompt}
                 ],
-                max_tokens=200,
-                temperature=random.uniform(1.3, 1.8),
-                top_p=random.uniform(0.85, 0.95)
+                max_completion_tokens=400,
+                temperature=random.uniform(0.8, 1.6),
+                top_p=random.uniform(0.85, 0.95),
+                frequency_penalty=random.uniform(0.5, 1.5),
+                presence_penalty=random.uniform(0.3, 1.0)
             )
 
             category_text = response.choices[0].message.content.strip()
@@ -293,11 +341,29 @@ async def category(ctx):
             await ctx.send("⚠️ Sorry, I couldn't generate a category. Please try again later.")
             print(f"OpenAI error: {e}")
 
+    info(f"PROMPT: {category_text}")
+
 # Parse API response (assuming consistent formatting)
     lines = category_text.split('\n')
     category_name = lines[0].strip()
     description = lines[1].strip()  # Description is always on line 2
-    champions_line = lines[4].strip()
+    champions_line = "No champions listed"
+    for i, line in enumerate(lines):
+        if "Example Champions" in line and i + 1 < len(lines):
+            champions_line = lines[i + 1].strip()
+            break
+        elif "Example Champions" in line and ":" in line:
+            # Sometimes it's on the same line after the colon
+            champions_line = line.split(":", 1)[1].strip()
+            break
+
+    previous_categories.add(category_name)
+    if len(previous_categories) > MAX_HISTORY:
+        # Remove oldest entries if we exceed max
+        previous_categories = set(list(previous_categories)[-MAX_HISTORY:])
+    save_category_history()
+    
+    info(f"Added '{category_name}' to category history")
         
     # Create embed for API response
     embed = discord.Embed(
@@ -311,7 +377,7 @@ async def category(ctx):
         inline=False
     )
 
-    embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1398537971459821660/1398540191702057061/add4858a-c768-4d4f-99e3-5ba3abe13745.png?ex=6885bb8d&is=68846a0d&hm=e4de2dd37f050078d27a8ae0d7c3150d7c9e0d882baddaff1670d76a28887a7c&")
+    embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1398537971459821660/1398540191702057061/add4858a-c768-4d4f-99e3-5ba3abe13745.png?ex=68a9540d&is=68a8028d&hm=3c1055aa0352e2d975ec26f0acd3899dae27fea50ad9969fa1460a2a04ac2954&")
     embed.set_footer(text=f"League of Legends ARAM • {user_settings} Category") 
 
     # view = RerollView(category, ctx)

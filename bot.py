@@ -94,7 +94,9 @@ if not openai_api_key:
     raise ValueError("Missing OpenAI API key in .env file.")
 
 # Create bot instance
-client = commands.Bot(command_prefix='!', intents=discord.Intents.all())
+intents = discord.Intents.default()
+intents.message_content = True  # Only if you need message commands
+client = commands.Bot(command_prefix='!', intents=intents)
 
 # Category reference list (used in the prompt)
 category_list = """PROJECT Skins
@@ -189,11 +191,6 @@ async def on_ready():
     
     load_category_history()
     print("---------- League 2v2 Bot is ready ----------")
-
-@client.event
-async def on_message(message):
-    print(f"Message from {message.author}: {message.content}")
-    await client.process_commands(message)
 
 # ---------- !roll COMMAND ----------
 
